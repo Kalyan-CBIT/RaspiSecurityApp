@@ -13,6 +13,9 @@ import java.lang.*;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
+import android.bluetooth.BluetoothManager;
+import android.bluetooth.BluetoothProfile;
+
 
 import android.content.ContextWrapper;
 import android.content.Intent;
@@ -28,11 +31,14 @@ public class MainActivity extends FlutterActivity {
     private BluetoothSocket bluetoothSocket = null;
     private boolean test = false;
     protected boolean isConnectedToSocket = false;
+    protected String res="";
 
     private UUID myUUID;
+    //Set<BluetoothDevice> paireDevices;
     ArrayList<Map<String,String>> pairedDeviceArrayList;
     // BluetoothServiceRFCom objService = BluetoothServiceRFCom();
     BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+
 
   @Override
   public void configureFlutterEngine(@NonNull FlutterEngine flutterEngine) {
@@ -52,14 +58,31 @@ public class MainActivity extends FlutterActivity {
               break;
               case "getBluetoothStatus":
                     System.out.println(test);
-                    int res = isBluetoothEnabled();
-                    result.success(res);
+                    int r = isBluetoothEnabled();
+                    result.success(r);
               break;
               case "getBondedDevices":
                     if(bluetoothAdapter.isEnabled())
                       result.success(getListofBonded());
                     else
                       result.success(pairedDeviceArrayList);
+                    break;
+
+              case "makeConnection":
+                    String macAddr = call.argument("macAddr");
+                    result.success(makeConnection(macAddr));
+                    break;
+
+              case "sendData":
+                    String data = call.argument("data");
+                    byte[] buffer = data.getBytes();
+                    res = sendData(buffer);
+                    result.success(res);
+                    break;
+
+              case "closeConnection":
+                    String res = closeConnection();
+                    result.success(res);
                     break;
                     
               default:
@@ -93,8 +116,46 @@ public class MainActivity extends FlutterActivity {
     return pairedDeviceArrayList;
   }
 
+  protected boolean makeConnection(String macAddr) {
+    Set<BluetoothDevice> pairedDevices = bluetoothAdapter.getBondedDevices();
+    if(pairedDevices.size()<1) return false;
+    BluetoothDevice device = bluetoothAdapter.getRemoteDevice(macAddr);
+    myUUID = UUID.fromString(UUID_STRING_WELL_KNOWN_SPP);
+    try {
+        // bluetoothSocket = device.createInsecureRfcommSocketToServiceRecord(myUUID);
+        bluetoothSocket = device.createRfcommSocketToServiceRecord(myUUID);
+    } catch (IOException e) {
+        System.out.println(e);
+    }
+    if(bluetoothSocket!=null){
+        try {
+            bluetoothSocket.connect();
+            System.out.println("connected");
+            isConnectedToSocket = true;
+        } catch (IOException e) {
+            System.out.println(e);
+            try {
+                System.out.println("Trying Fallback");
+                bluetoothSocket =(BluetoothSocket) device.getClass().getMethod("createRfcommSocket", new Class[] {int.class}).invoke(device,1);
+                bluetoothSocket.connect();
+                isConnectedToSocket = true;
+                System.out.println("connected");
+            }
+            catch (Exception e2) {
+                System.out.println("Couldn't establish Bluetooth connection!");
+                try {
+                    bluetoothSocket.close();
+                } catch (IOException e1) {
+                    System.out.println(e1);
+                }
+            }
+        }
+    }
+    return isConnectedToSocket;
+  }
+
   protected String sendData(byte[] buffer){
-    if(!isConnectedToSocket) return "No Socket Connection";
+    if(!bluetoothSocket.isConnected()) return "No Socket Connection";
     try{
         OutputStream ou = bluetoothSocket.getOutputStream();
         ou.write(buffer);
@@ -102,7 +163,19 @@ public class MainActivity extends FlutterActivity {
         return e.toString();
     }
     return "sent";
-}
+  }
+  protected String closeConnection(){
+    if(!isConnectedToSocket) return "closed";
+    if(bluetoothSocket.isConnected()){
+        try{
+        bluetoothSocket.close();
+        }catch (IOException e){
+            System.out.println(e);
+            return "error";
+        }
+    }
+    return "closed";
+  }
 
  private List<String> getListOfString(Set<BluetoothDevice> bonded)
  {

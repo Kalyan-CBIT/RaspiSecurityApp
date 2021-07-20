@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:security_cam/themes.dart';
 
-class nativeBluetooth extends StatefulWidget {
-  const nativeBluetooth({Key? key}) : super(key: key);
+class NativeBluetooth extends StatefulWidget {
+  const NativeBluetooth({Key? key}) : super(key: key);
 
   @override
-  _nativeBluetoothState createState() => _nativeBluetoothState();
+  _NativeBluetoothState createState() => _NativeBluetoothState();
 }
 
-class _nativeBluetoothState extends State<nativeBluetooth> {
+class _NativeBluetoothState extends State<NativeBluetooth> {
   static const platform = const MethodChannel('flutter.native/helper');
+  bool isEmpty = true;
   List<dynamic> bonded = [];
   void initState() {
     super.initState();
@@ -26,24 +28,38 @@ class _nativeBluetoothState extends State<nativeBluetooth> {
     } on PlatformException catch (e) {
       print(e);
     }
+    setState(() {
+      isEmpty = false;
+    });
   }
 
   Widget getWigetsList() {
     return ListView.separated(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(20),
       itemCount: bonded.length,
       itemBuilder: (BuildContext context, int index) {
         return Container(
           height: 50,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              Text(
-                bonded[index]["name"],
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
-              ),
-              Text(bonded[index]["address"])
-            ],
+          color: crls["background2"],
+          child: GestureDetector(
+            onTap: () async {
+              final bool res = await platform.invokeMethod(
+                  "makeConnection", {"macAddr": bonded[index]["address"]});
+              if (res)
+                Navigator.pushNamed(context, '/bluetoothTextFeild');
+              else
+                print("Smething went wrong");
+            },
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                Text(
+                  bonded[index]["name"],
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
+                ),
+                Text(bonded[index]["address"])
+              ],
+            ),
           ),
         );
       },
@@ -55,9 +71,10 @@ class _nativeBluetoothState extends State<nativeBluetooth> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        brightness: Brightness.dark,
         title: Text("paired devices"),
       ),
-      body: bonded.length > 0 ? getWigetsList() : CircularProgressIndicator(),
+      body: isEmpty ? CircularProgressIndicator() : getWigetsList(),
     );
   }
 }
